@@ -1,0 +1,482 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Stochastic SDE Simulator</title>
+    <style>
+        body {
+            font-family: 'Arial', sans-serif;
+            background-color: #f4f4f4; /* Light background color */
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        h2 {
+            color: #333; /* Title color */
+            margin-bottom: 20px;
+        }
+
+        .controls {
+            display: flex; /* Horizontal layout */
+            align-items: center; /* Center vertically */
+            margin-bottom: 20px; /* Space below controls */
+        }
+
+        label {
+            font-size: 18px; /* Font size for label */
+            color: #555; /* Label color */
+            margin-right: 10px; /* Space between label and input */
+        }
+
+        input[type="number"], input[type="range"] {
+            padding: 8px;
+            margin: 0 10px;
+            border: 1px solid #ccc; /* Border color */
+            border-radius: 4px; /* Rounded corners */
+            font-size: 16px; /* Font size */
+            width: 80px; /* Fixed width for consistency */
+        }
+
+        button {
+            padding: 8px 16px;
+            background-color: #007bff; /* Button background color */
+            color: white; /* Button text color */
+            border: none;
+            border-radius: 4px; /* Rounded corners */
+            cursor: pointer; /* Cursor indicator */
+            font-size: 16px; /* Font size */
+            transition: background-color 0.3s; /* Transition on color change */
+            margin-top: 20px; /* Margin above button */
+        }
+
+        button:hover {
+            background-color: #0056b3; /* Button color on hover */
+        }
+
+        canvas {
+            border: 1px solid #ccc; /* Border color of canvas */
+            background-color: white; /* Background color of canvas */
+            margin-top: 30px; /* Margin above canvas to separate it */
+        }
+        .formula {
+            font-family: 'Courier New', Courier, monospace;
+            text-align: center;
+        }
+    </style>
+    <script type="text/javascript" src="https://polyfill.io/v3/polyfill.min.js?features=es6"></script>
+    <script type="text/javascript" id="MathJax-script" async
+      src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js">
+    </script>
+</head>
+<body>
+
+<h2>Stochastic SDE Simulator</h2>
+
+<div class="controls">
+    <label for="numAttackers">Number of Attackers:</label>
+    <input type="number" id="numAttackers" value="50" min="1" max="10000">
+
+    <label for="numAttacks">n (Number of Intervals):</label>
+    <input type="number" id="numAttacks" value="100" min="1" max="10000">
+
+    <label for="attackProbability">Success Probability:</label>
+    <input type="range" id="attackProbability" value="70" min="0" max="100">
+    <span id="probabilityValue">70%</span>&nbsp;&nbsp;&nbsp;&nbsp;
+
+    
+    <label for="IntermediatePos">Intermediate analysis position:</label>
+    <select id="IntermediatePos">
+        <option value="1/3">1/3</option>
+        <option value="1/2">1/2</option>
+        <option value="2/3" selected="">2/3</option>
+    </select>
+</div>
+
+<button onclick="drawGraph()">Draw Graph</button>
+<!-- Dimensioni canvas -->
+<canvas id="graphCanvas" width="2100" height="1350"></canvas>
+
+<script>
+    const canvas = document.getElementById('graphCanvas');
+    const ctx = canvas.getContext('2d');
+    const canvasWidth = canvas.width;
+    const canvasHeight = canvas.height;
+
+    const margin = 60;  
+    const fixedAxisLength = 900; // Ingrandito il grafico
+
+    function getColors(num) {
+        const colors = [];
+        for (let i = 0; i < num; i++) {
+            const color = `hsl(${Math.random() * 360}, 100%, 50%)`;
+            colors.push(color);
+        }
+        return colors;
+    }
+
+    function drawAxes(numAttacks, InternPoint) {
+        ctx.clearRect(0, 0, canvasWidth, canvasHeight);
+
+        // X1-axis (attacks made)
+        ctx.beginPath();
+        ctx.moveTo(margin, canvasHeight / 2);
+        ctx.lineTo(margin + Math.floor(InternPoint*numAttacks)*fixedAxisLength / numAttacks, canvasHeight / 2);
+        ctx.strokeStyle = 'black'; // Black color
+        ctx.stroke();
+        
+        // Y-axis (successful attacks)
+        const leftAxisX = margin + Math.floor(InternPoint*numAttacks)*fixedAxisLength / numAttacks;
+        ctx.beginPath();
+        ctx.moveTo(leftAxisX, canvasHeight - margin);
+        ctx.lineTo(leftAxisX, margin);
+        ctx.strokeStyle = 'black'; // Black color
+        ctx.stroke();
+        
+        // Y'-axis (distributor of attackers)
+        const rightAxisX = leftAxisX + 100;
+        ctx.beginPath();
+        ctx.moveTo(rightAxisX, canvasHeight - margin);
+        ctx.lineTo(rightAxisX, margin);
+        ctx.strokeStyle = 'black'; // Black color
+        ctx.stroke();
+
+        // X2-axis (attacks made)
+        ctx.beginPath();
+        ctx.moveTo(rightAxisX + 320, canvasHeight / 2);
+        ctx.lineTo(rightAxisX + 320 + Math.ceil((1-InternPoint)*numAttacks)*fixedAxisLength / numAttacks, canvasHeight / 2);
+        ctx.strokeStyle = 'black'; // Black color
+        ctx.stroke();
+
+        // Y2-axis (successful attacks)
+        const leftAxisX2 = rightAxisX + 320 + Math.ceil((1-InternPoint)*numAttacks)*fixedAxisLength / numAttacks;
+        ctx.beginPath();
+        ctx.moveTo(leftAxisX2, canvasHeight - margin);
+        ctx.lineTo(leftAxisX2, margin);
+        ctx.strokeStyle = 'black'; // Black color
+        ctx.stroke();
+        
+        // Y2' axis (distributor of attackers)
+        const rightAxisX2 = leftAxisX2 + 100;
+        ctx.beginPath();
+        ctx.moveTo(rightAxisX2, canvasHeight - margin);
+        ctx.lineTo(rightAxisX2, margin);
+        ctx.strokeStyle = 'black'; // Black color
+        ctx.stroke();
+
+        
+        
+        // Axis labels
+        ctx.font = "16px Arial"; // Font per tutte le scritte
+        ctx.fillStyle = 'black'; // Black color
+        ctx.fillText("Time (X)", margin + 10, canvasHeight/2 + 150); // Moved to the far left
+        ctx.fillText("Successful Attacks (Y)", rightAxisX - 310, margin + 10); // Moved up and left of the Y' axis
+
+        ctx.fillText("Successful Attacks (Y)", rightAxisX2 - 310, margin + 10); // Moved up and left of the Y2' axis
+
+        // Y-axis labels (from -numAttacks to numAttacks) with ticks
+        const stepY = (canvasHeight - 2 * margin) / (2*numAttacks);  // Calculate distance between labels on the Y-axis
+        
+        for (let i = -numAttacks; i <= numAttacks; i++) {
+            if(i%(numAttacks/20) === 0){
+                const y = canvasHeight / 2 - i * stepY;  // Position labels proportional to the length of the axis
+                // Draw ticks on the Y-axis
+                ctx.beginPath();
+                ctx.moveTo(leftAxisX - 10, y);
+                ctx.lineTo(leftAxisX + 10, y);
+                ctx.strokeStyle = 'black'; // Black color
+                ctx.stroke();
+                // Label with fixed size
+                ctx.font = "12px Arial"; // Fixed size
+                ctx.fillText(i, leftAxisX + 15, y + 3);  // Labels aligned along the Y-axis
+            }
+        }
+
+        // Y' axis labels (from 0 to numAttacks) with ticks
+        for (let i = -numAttacks; i <= numAttacks; i++) {
+            if(i%(numAttacks/20) === 0){
+                const y = canvasHeight / 2 - i * stepY;  // Position labels proportional to the length of the axis
+                // Draw ticks on the Y'
+                ctx.beginPath();
+                ctx.moveTo(rightAxisX - 10, y);
+                ctx.lineTo(rightAxisX + 10, y);
+                ctx.strokeStyle = 'black'; // Black color
+                ctx.stroke();
+                // Label with fixed size
+                ctx.fillText(i, rightAxisX + 15, y + 3);  // Labels aligned along the Y'
+            }
+        }
+
+        // Y2-axis labels (from 0 to numAttacks) with ticks  
+        for (let i = -numAttacks; i <= numAttacks; i++) {
+            if(i%(numAttacks/20) === 0){
+                const y = canvasHeight / 2 - i * stepY;  // Position labels proportional to the length of the axis
+                // Draw ticks on the Y-axis
+                ctx.beginPath();
+                ctx.moveTo(leftAxisX2 - 10, y);
+                ctx.lineTo(leftAxisX2 + 10, y);
+                ctx.strokeStyle = 'black'; // Black color
+                ctx.stroke();
+                // Label with fixed size
+                ctx.font = "12px Arial"; // Fixed size
+                ctx.fillText(i, leftAxisX2 + 15, y + 3);  // Labels aligned along the Y-axis
+            }
+        }
+
+        // Y2' axis labels (from 0 to numAttacks) with ticks
+        for (let i = -numAttacks; i <= numAttacks; i++) {
+            if(i%(numAttacks/20) === 0){
+                const y = canvasHeight / 2 - i * stepY;  // Position labels proportional to the length of the axis
+                // Draw ticks on the Y'
+                ctx.beginPath();
+                ctx.moveTo(rightAxisX2 - 10, y);
+                ctx.lineTo(rightAxisX2 + 10, y);
+                ctx.strokeStyle = 'black'; // Black color
+                ctx.stroke();
+                // Label with fixed size
+                ctx.fillText(i, rightAxisX2 - 25, y + 3);  // Labels aligned along the Y'
+            }
+        }
+
+        ctx.font = "16px Arial"; // Restore original font size
+    }
+
+    function drawGraph() {
+        const numAttackers = parseInt(document.getElementById('numAttackers').value);
+        const numAttacks = parseInt(document.getElementById('numAttacks').value);
+        const attackProbability = parseInt(document.getElementById('attackProbability').value) / 100; // Convert to percentage
+        
+        
+        const IntermediatePos = document.getElementById('IntermediatePos').value;
+        let InternPoint = 2/3; // default: 2/3
+        if(IntermediatePos === "1/2") {
+            InternPoint = 1/2;
+        } else if (IntermediatePos === "1/3"){
+            InternPoint = 1/3;
+        }
+
+
+        const colors = getColors(numAttackers);
+        const canvasHeight = canvas.height;
+        
+        drawAxes(numAttacks, InternPoint);
+        
+        const attackersData = Array(numAttackers).fill(0);
+        const successCounts = Array(2*numAttacks + 1).fill(0); // Distribution
+
+        let mean = 0; // Mk starts at 0
+        let variance = 0;  // Inizializziamo la varianza
+
+        // Adjust stepSize for number of attacks
+        const stepSize = fixedAxisLength / numAttacks; 
+
+        //const stepY = (canvasHeight - 2 * margin) / (2*numAttacks);
+        //const y = canvasHeight / 2 - i * stepY;
+
+        // Simulate attacks for each attacker 1
+        let successfulAttacks = Array(numAttackers).fill(0);
+        for (let attackerIndex = 0; attackerIndex < numAttackers; attackerIndex++) {
+            let x = margin;
+            let y = canvasHeight / 2;
+
+            ctx.strokeStyle = colors[attackerIndex % colors.length];
+
+            for (let i = 0; i < Math.floor(InternPoint*numAttacks); i++) {
+                let randomNum = Math.random();
+                
+                if (randomNum < attackProbability) {
+                    ctx.beginPath();
+                    ctx.moveTo(x, y);    
+                    y -= ((canvasHeight - 2 * margin) / (2*numAttacks))/Math.sqrt(numAttacks); // Vertical step for successful attack
+                    ctx.lineTo(x, y);
+                    x += stepSize;
+                    ctx.lineTo(x, y);
+                    ctx.stroke();
+                    successfulAttacks[attackerIndex]++;
+                } else {
+                    ctx.beginPath();
+                    ctx.moveTo(x, y);
+                    y += ((canvasHeight - 2 * margin) / (2*numAttacks))/Math.sqrt(numAttacks); // Vertical step for successful attack
+                    ctx.lineTo(x, y);
+                    x += stepSize;
+                    ctx.lineTo(x, y);
+                    ctx.stroke();
+                    successfulAttacks[attackerIndex]--;
+                }
+            }
+
+            attackersData[attackerIndex] = successfulAttacks[attackerIndex];
+            successCounts[successfulAttacks[attackerIndex]+numAttacks]++;
+
+            
+            // Aggiorna la media ricorsivamente con la formula Mk = Mk-1 + (xk - Mk-1) / k
+            let previousMean = mean;  // Memorizziamo la media precedente
+            mean = mean + (successfulAttacks[attackerIndex]/Math.sqrt(numAttacks) - mean) / (attackerIndex + 1);  // Usa attackerIndex + 1 perché attackerIndex parte da 0
+
+            // Aggiorna la varianza ricorsivamente con la formula var_k = var_{k-1} + (x_k - M_{k-1})(x_k - M_k)
+            variance = variance + (successfulAttacks[attackerIndex]/Math.sqrt(numAttacks) - previousMean) * (successfulAttacks[attackerIndex]/Math.sqrt(numAttacks) - mean);
+        }
+        
+        drawSuccessDistribution(successCounts, numAttacks, InternPoint, numAttackers);
+        // Posizionato in basso a destra
+        let IntermediateVariance = variance / numAttackers;
+        ctx.fillText("Intermediate Variance: " + IntermediateVariance.toFixed(2), canvasWidth - 320, canvasHeight - 200);
+        ctx.fillText("Intermediate Average Successes: " + mean.toFixed(2), canvasWidth - 320, canvasHeight - 250);
+        
+        successCounts.fill(0);
+        variance = 0; 
+        // Simulate attacks for each attacker 2
+        for (let attackerIndex = 0; attackerIndex < numAttackers; attackerIndex++) {
+            let x = margin + Math.floor(InternPoint*numAttacks)*fixedAxisLength / numAttacks + 100 + 320;
+            let y = canvasHeight / 2 - successfulAttacks[attackerIndex]*((canvasHeight - 2 * margin) / (2*numAttacks))/Math.sqrt(numAttacks);
+
+            ctx.strokeStyle = colors[attackerIndex % colors.length];
+
+            for (let i = 0; i < Math.ceil((1-InternPoint)*numAttacks); i++) {
+                let randomNum = Math.random();
+                
+                if (randomNum < attackProbability) {
+                    ctx.beginPath();
+                    ctx.moveTo(x, y);    
+                    y -= ((canvasHeight - 2 * margin) / (2*numAttacks))/Math.sqrt(numAttacks); // Vertical step for successful attack
+                    ctx.lineTo(x, y);
+                    x += stepSize;
+                    ctx.lineTo(x, y);
+                    ctx.stroke();
+                    successfulAttacks[attackerIndex]++;
+                } else {
+                    ctx.beginPath();
+                    ctx.moveTo(x, y);
+                    y += ((canvasHeight - 2 * margin) / (2*numAttacks))/Math.sqrt(numAttacks); // Vertical step for successful attack
+                    ctx.lineTo(x, y);
+                    x += stepSize;
+                    ctx.lineTo(x, y);
+                    ctx.stroke();
+                    successfulAttacks[attackerIndex]--;
+                }
+                
+            }
+
+            attackersData[attackerIndex] = successfulAttacks[attackerIndex];
+            successCounts[successfulAttacks[attackerIndex]+numAttacks]++;
+
+            let previousMean = mean;  
+            mean = mean + (successfulAttacks[attackerIndex]/Math.sqrt(numAttacks) - mean) / (attackerIndex + 1);  
+            
+            variance = variance + (successfulAttacks[attackerIndex]/Math.sqrt(numAttacks) - previousMean) * (successfulAttacks[attackerIndex]/Math.sqrt(numAttacks) - mean);
+        }
+
+        
+        drawSuccessDistribution2(successCounts, numAttacks, InternPoint, numAttackers);
+        
+        // Posizionato in basso a destra
+        let finalVariance = variance / numAttackers;
+        ctx.fillText("Final Variance: " + finalVariance.toFixed(2), canvasWidth - 320, canvasHeight - 100);
+        ctx.fillText("Final Average Successes: " + mean.toFixed(2), canvasWidth - 320, canvasHeight - 150);
+    }
+
+    function drawSuccessDistribution(successCounts, numAttacks, InternPoint, numAttackers) {
+        const rightAxisX = margin + Math.floor(InternPoint*numAttacks)*fixedAxisLength / numAttacks + 100;
+        const maxValue = Math.max(...successCounts); 
+        const barWidth = 5; 
+        
+        for (let i = 0; i <= 2*numAttacks; i++) {
+            const y = (canvasHeight/2 - (i-numAttacks) * ((canvasHeight - 2 * margin) / (2*numAttacks))/Math.sqrt(numAttacks));
+            const barHeight = (successCounts[i] / maxValue) * 200; 
+
+            ctx.fillStyle = 'blue';
+            ctx.fillRect(rightAxisX, y, barHeight, barWidth);
+
+            // Adding values above the bars
+            ctx.fillStyle = 'black'; // Black color
+            if (successCounts[i] > 0) {
+                //ctx.fillText(successCounts[i], rightAxisX + barHeight + 5, y + barWidth / 2);
+                // Calcola la frequenza relativa e visualizzala
+                const relativeFrequency = (successCounts[i] / numAttackers * 100).toFixed(1); // Frequenza relativa in percentuale
+                //ctx.fillText(`(${relativeFrequency}%)`, rightAxisX + barHeight + 20, y + barWidth / 2); // Aggiungi anche la frequenza relativa
+            }
+        }
+    }
+
+    function drawSuccessDistribution2(successCounts, numAttacks, InternPoint, numAttackers) {
+        const rightAxisX = margin + Math.floor(InternPoint*numAttacks)*fixedAxisLength / numAttacks + 100 + 320 + Math.ceil((1-InternPoint)*numAttacks)*fixedAxisLength / numAttacks + 100;
+        const maxValue = Math.max(...successCounts); 
+        const barWidth = 5; 
+        
+        for (let i = 0; i <= 2*numAttacks; i++) {
+            const y = (canvasHeight/2 - (i-numAttacks) * ((canvasHeight - 2 * margin) / (2*numAttacks))/Math.sqrt(numAttacks));
+            const barHeight = (successCounts[i] / maxValue) * 200; 
+
+            ctx.fillStyle = 'blue';
+            ctx.fillRect(rightAxisX, y, barHeight, barWidth);
+
+            // Adding values above the bars
+            ctx.fillStyle = 'black'; // Black color
+            if (successCounts[i] > 0) {
+                //ctx.fillText(successCounts[i], rightAxisX + barHeight + 5, y + barWidth / 2);
+                // Calcola la frequenza relativa e visualizzala
+                const relativeFrequency = (successCounts[i] / numAttackers * 100).toFixed(1); // Frequenza relativa in percentuale
+                //ctx.fillText(`(${relativeFrequency}%)`, rightAxisX + barHeight + 20, y + barWidth / 2); // Aggiungi anche la frequenza relativa
+            }
+        }
+    }
+
+    // Update the value of the probability when the range changes
+    document.getElementById('attackProbability').addEventListener('input', function() {
+        document.getElementById('probabilityValue').innerText = this.value + '%';
+    });
+</script>
+
+<!-- Additional Text Section -->
+<div style="margin-top: 30px; text-align: left; max-width: 800px;">
+    <h1>Theory/Research: Statistical Independence</h1>
+    <p>
+        In probability theory, <strong>statistical independence</strong> between two events means that the occurrence of one event 
+        does not affect the probability of the occurrence of the other. The formal definition can be illustrated with two events 
+        A and B:
+    </p>
+
+    <h3>Formal Definition:</h3>
+    <p>
+        Two events A and B are independent if and only if:
+    </p>
+    <p class="formula">P(A ∩ B) = P(A) · P(B)</p>
+    <p>
+        This means that the probability of both events occurring together is the product of their individual probabilities.
+    </p>
+
+    <h3>Key Concepts of Independence:</h3>
+    <ol>
+        <li><strong>Independence of Events:</strong> If A and B are independent, knowing that A occurred provides no information 
+        about whether B will occur, and vice versa.</li>
+        <li><strong>Conditional Independence:</strong> If A and B are independent, the conditional probability P(A | B) is simply 
+        P(A), meaning the probability of A given B is just the probability of A.</li>
+    </ol>
+
+    <h3>Example:</h3>
+    <p>
+        If you roll two fair dice, the outcome of one die is independent of the outcome of the other die. Let:
+        <ul>
+            <li>A be the event that the first die shows a 4 (with P(A) = 1/6),</li>
+            <li>B be the event that the second die shows a 4 (with P(B) = 1/6).</li>
+        </ul>
+    </p>
+    <p>
+        The probability that both dice show 4 is:
+    </p>
+    <p class="formula">P(A ∩ B) = P(A) · P(B) = (1/6) × (1/6) = 1/36</p>
+    <p>
+        This illustrates that the events are independent.
+    </p>
+
+    <h2>Analogies with Continuous Processes:</h2>
+    <p>
+        In stochastic processes, <strong>independent increments</strong> refer to a property of processes like the Wiener process (or Brownian motion). A process has independent increments if the value of the process in one time interval is independent of its value in another disjoint time interval. This is a critical feature in processes like the Wiener process, which models random walks and diffusion phenomena.
+    </p>
+</div>
+
+</body>
+</html>
